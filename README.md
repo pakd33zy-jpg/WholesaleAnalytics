@@ -40,3 +40,4 @@ Not yet provider-connected:
 - E-signature / contract delivery
 
 Those provider connections should write their results back into `outreach_events`, `offers`, and future contract tables instead of bypassing the CRM.
+
