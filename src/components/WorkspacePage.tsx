@@ -11,6 +11,7 @@ import { updateLeadStage } from '../lib/leads'
 import LeadFinder from './LeadFinder'
 import DistressLeads from './DistressLeads'
 import PeopleFinder from './PeopleFinder'
+import SurplusTools from './SurplusTools'
 
 export type WorkspaceView = 'dashboard'|'leadfinder'|'distress'|'peoplefinder'|'leads'|'pipeline'|'outreach'|'offers'|'buyers'|'tasks'|'calculator'|'contracts'|'surplus'|'scripts'
 export type WorkspaceStage = 'New' | 'Contacted' | 'Qualified' | 'Offer Sent' | 'Under Contract' | 'Closed'
@@ -589,6 +590,7 @@ function SurplusRecoveryPage() {
 
   return <div className="workspaceStack">
     {message && <div className="loadingBanner">{message}</div>}
+    <SurplusTools />
 
     <section className="metrics">
       <div className="metric"><span className="metricIcon"><BadgeDollarSign/></span><div><p>Open cases</p><h3>{openCases.length}</h3><small>{cases.length} total records</small></div></div>
