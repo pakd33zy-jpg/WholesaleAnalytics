@@ -9,8 +9,9 @@ import { addBuyer, addTask, completeTask, createOffer, importLeads, listBuyers, 
 import { parseLeadCsv } from '../lib/csv'
 import { updateLeadStage } from '../lib/leads'
 import LeadFinder from './LeadFinder'
+import PeopleFinder from './PeopleFinder'
 
-export type WorkspaceView = 'dashboard'|'leadfinder'|'leads'|'pipeline'|'outreach'|'offers'|'buyers'|'tasks'|'calculator'|'contracts'|'surplus'|'scripts'
+export type WorkspaceView = 'dashboard'|'leadfinder'|'peoplefinder'|'leads'|'pipeline'|'outreach'|'offers'|'buyers'|'tasks'|'calculator'|'contracts'|'surplus'|'scripts'
 export type WorkspaceStage = 'New' | 'Contacted' | 'Qualified' | 'Offer Sent' | 'Under Contract' | 'Closed'
 
 export type WorkspaceLead = {
@@ -168,6 +169,7 @@ export default function WorkspacePage({view,leads,onSelectLead,onAddLead,onRefre
   }
 
   if (view==='leadfinder') return <LeadFinder existingAddresses={leads.map(l=>l.property)} onRefreshLeads={onRefreshLeads} />
+  if (view==='peoplefinder') return <PeopleFinder leads={leads} />
   if (view==='leads') return <LeadsPage leads={leads} query={leadQuery} setQuery={setLeadQuery} onSelectLead={onSelectLead} onAddLead={onAddLead} uploadCsv={uploadCsv} message={message} />
   if (view==='pipeline') return <PipelinePage leads={leads} onRefreshLeads={onRefreshLeads} onSelectLead={onSelectLead} setMessage={setMessage} />
   if (view==='outreach') return <OutreachPage leads={leads} outreach={outreach} submitOutreach={submitOutreach} busy={busy} message={message} />

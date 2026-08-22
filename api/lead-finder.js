@@ -69,9 +69,8 @@ async function verifySupabaseUser(req) {
   const auth = text(req.headers.authorization)
   if (!auth.startsWith('Bearer ')) return false
 
-  const url = process.env.VITE_SUPABASE_URL
-  const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY
-  if (!url || !key) throw new Error('Server authentication is not configured.')
+  const url = process.env.VITE_SUPABASE_URL || 'https://wnbavlsinslqyfbrobgx.supabase.co'
+  const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_Zu_8eyZC4vspm1X3Np0pjw_TMuTRQXw'
 
   const response = await fetch(`${url.replace(/\/$/,'')}/auth/v1/user`,{
     headers:{
