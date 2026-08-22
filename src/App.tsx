@@ -10,6 +10,8 @@ import CrmTools from './components/CrmTools'
 
 type Stage = 'New' | 'Contacted' | 'Qualified' | 'Offer Sent' | 'Under Contract' | 'Closed'
 
+const stages: Stage[] = ['New', 'Contacted', 'Qualified', 'Offer Sent', 'Under Contract', 'Closed']
+
 type Lead = {
   id: string
   owner: string
@@ -153,7 +155,7 @@ function App() {
         <div className="card">
           <div className="cardTitle"><div><h2>Pipeline</h2><p>Lead movement by stage</p></div><TrendingUp size={20}/></div>
           <div className="funnel">
-            {stageCounts.map((s,i)=><div className="funnelRow" key={s.stage}>
+            {stageCounts.map((s)=><div className="funnelRow" key={s.stage}>
               <span>{s.stage}</span>
               <div className="bar"><i style={{width:`${Math.max(8, (s.count/Math.max(1,leads.length))*100)}%`}}/></div>
               <b>{s.count}</b>
