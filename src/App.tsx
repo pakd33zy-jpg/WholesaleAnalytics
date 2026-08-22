@@ -12,10 +12,11 @@ import WorkspacePage, { type WorkspaceLead, type WorkspaceView } from './compone
 type Stage = 'New' | 'Contacted' | 'Qualified' | 'Offer Sent' | 'Under Contract' | 'Closed'
 
 const stages: Stage[] = ['New', 'Contacted', 'Qualified', 'Offer Sent', 'Under Contract', 'Closed']
-const views: WorkspaceView[] = ['dashboard','leads','pipeline','outreach','offers','buyers','tasks','calculator','contracts','surplus','scripts']
+const views: WorkspaceView[] = ['dashboard','leadfinder','leads','pipeline','outreach','offers','buyers','tasks','calculator','contracts','surplus','scripts']
 
 const pageMeta: Record<WorkspaceView, { title:string; subtitle:string }> = {
   dashboard: { title:'Deal Dashboard', subtitle:'See what needs attention, what can close, and where the money is.' },
+  leadfinder: { title:'Lead Finder', subtitle:'Find and rank nationwide property-owner leads, then add the best prospects directly to the CRM.' },
   leads: { title:'Leads', subtitle:'Manage motivated sellers, deal economics, and lead priority.' },
   pipeline: { title:'Pipeline', subtitle:'Move opportunities from new lead through closing.' },
   outreach: { title:'Outreach', subtitle:'Track seller calls, texts, emails, and follow-up history.' },
@@ -141,6 +142,7 @@ function App() {
       <div className="brand"><div className="logo">WA</div><div><strong>Wholesale Analytics</strong><span>Deal Command Center</span></div></div>
       <nav>
         <a href="#dashboard" className={view==='dashboard'?'active':''}><Home size={18}/> Dashboard</a>
+        <a href="#leadfinder" className={view==='leadfinder'?'active':''}><Search size={18}/> Lead Finder</a>
         <a href="#leads" className={view==='leads'?'active':''}><Users size={18}/> Leads <b>{active.length}</b></a>
         <a href="#pipeline" className={view==='pipeline'?'active':''}><Target size={18}/> Pipeline</a>
         <a href="#outreach" className={view==='outreach'?'active':''}><Send size={18}/> Outreach</a>

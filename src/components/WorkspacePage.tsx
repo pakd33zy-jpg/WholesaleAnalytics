@@ -8,8 +8,9 @@ import { supabase } from '../lib/supabase'
 import { addBuyer, addTask, completeTask, createOffer, importLeads, listBuyers, listTasks, logOutreach } from '../lib/crm'
 import { parseLeadCsv } from '../lib/csv'
 import { updateLeadStage } from '../lib/leads'
+import LeadFinder from './LeadFinder'
 
-export type WorkspaceView = 'dashboard'|'leads'|'pipeline'|'outreach'|'offers'|'buyers'|'tasks'|'calculator'|'contracts'|'surplus'|'scripts'|'scripts'
+export type WorkspaceView = 'dashboard'|'leadfinder'|'leads'|'pipeline'|'outreach'|'offers'|'buyers'|'tasks'|'calculator'|'contracts'|'surplus'|'scripts'
 export type WorkspaceStage = 'New' | 'Contacted' | 'Qualified' | 'Offer Sent' | 'Under Contract' | 'Closed'
 
 export type WorkspaceLead = {
@@ -166,6 +167,7 @@ export default function WorkspacePage({view,leads,onSelectLead,onAddLead,onRefre
     } catch (err:any) { setMessage(err.message || 'Could not add buyer') }
   }
 
+  if (view==='leadfinder') return <LeadFinder existingAddresses={leads.map(l=>l.property)} onRefreshLeads={onRefreshLeads} />
   if (view==='leads') return <LeadsPage leads={leads} query={leadQuery} setQuery={setLeadQuery} onSelectLead={onSelectLead} onAddLead={onAddLead} uploadCsv={uploadCsv} message={message} />
   if (view==='pipeline') return <PipelinePage leads={leads} onRefreshLeads={onRefreshLeads} onSelectLead={onSelectLead} setMessage={setMessage} />
   if (view==='outreach') return <OutreachPage leads={leads} outreach={outreach} submitOutreach={submitOutreach} busy={busy} message={message} />
