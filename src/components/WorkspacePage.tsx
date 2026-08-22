@@ -9,7 +9,7 @@ import { addBuyer, addTask, completeTask, createOffer, importLeads, listBuyers, 
 import { parseLeadCsv } from '../lib/csv'
 import { updateLeadStage } from '../lib/leads'
 
-export type WorkspaceView = 'dashboard'|'leads'|'pipeline'|'outreach'|'offers'|'buyers'|'tasks'|'calculator'|'contracts'
+export type WorkspaceView = 'dashboard'|'leads'|'pipeline'|'outreach'|'offers'|'buyers'|'tasks'|'calculator'|'contracts'|'surplus'|'scripts'|'scripts'
 export type WorkspaceStage = 'New' | 'Contacted' | 'Qualified' | 'Offer Sent' | 'Under Contract' | 'Closed'
 
 export type WorkspaceLead = {
@@ -177,6 +177,8 @@ export default function WorkspacePage({view,leads,onSelectLead,onAddLead,onRefre
     setMessage('Calculated offer saved as a draft offer.')
     await loadWorkspace()
   }} message={message} />
+  if (view==='surplus') return <SurplusRecoveryPage />
+  if (view==='scripts') return <ScriptsPage />
   return <ContractMaker leads={leads} offers={offers} contracts={contracts} refresh={loadWorkspace} message={message} setMessage={setMessage} />
 }
 
@@ -486,5 +488,278 @@ function ContractMaker({leads,offers,contracts,refresh,message,setMessage}:Contr
       <div className="card contractPreview"><div className="previewHead"><div><h3>Document preview</h3><p>{contractType==='purchase'?'Purchase agreement':'Assignment agreement'}</p></div><span className="pill stagePill">Draft</span></div><pre>{preview}</pre></div>
     </section>
     <section className="card"><div className="sectionHeading"><FileText size={19}/><div><h2>Saved drafts</h2><p>Open a draft to edit, reprint or update it.</p></div></div><div className="dataCards">{contracts.length===0 && <p className="emptyText">No contract drafts yet.</p>}{contracts.map(c=><article className="dataCard" key={c.id}><div><b>{c.title}</b><span>{c.contract_type} · {c.status}</span><small>{c.leads?.owner_name || c.seller_name || ''}</small></div><strong>{money(c.contract_type==='assignment'?c.assignment_fee:c.purchase_price)}</strong><button className="miniAction" onClick={()=>loadDraft(c)}>Open</button></article>)}</div></section>
+  </div>
+}
+
+type SurplusCase = {
+  id:string
+  claimant_name:string
+  property_address:string
+  county:string
+  state:string
+  parcel_number:string
+  case_number:string
+  claimant_phone:string
+  claimant_email:string
+  mailing_address:string
+  sale_date:string|null
+  claim_deadline:string|null
+  surplus_amount:number
+  fee_percent:number
+  status:'new'|'verified'|'contacting'|'contracted'|'claim_filed'|'approved'|'paid'|'closed'|'lost'
+  source:string
+  source_url:string
+  next_action:string
+  notes:string
+  last_contact_at:string|null
+  created_at:string
+  updated_at:string
+}
+
+const surplusStatuses: SurplusCase['status'][] = ['new','verified','contacting','contracted','claim_filed','approved','paid','closed','lost']
+const statusLabel = (s:string) => s.split('_').map(x=>x.charAt(0).toUpperCase()+x.slice(1)).join(' ')
+
+function SurplusRecoveryPage() {
+  const [cases,setCases] = useState<SurplusCase[]>([])
+  const [query,setQuery] = useState('')
+  const [busy,setBusy] = useState(true)
+  const [message,setMessage] = useState('')
+
+  const loadCases = async () => {
+    setBusy(true)
+    const {data,error} = await supabase.from('surplus_cases').select('*').order('updated_at',{ascending:false})
+    if (error) setMessage(error.message)
+    else { setCases((data || []) as SurplusCase[]); setMessage('') }
+    setBusy(false)
+  }
+
+  useEffect(()=>{ loadCases() },[])
+
+  const submitCase = async (e:React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const form = e.currentTarget
+    const f = new FormData(form)
+    const payload = {
+      claimant_name:String(f.get('claimant_name')||'').trim(),
+      property_address:String(f.get('property_address')||'').trim(),
+      county:String(f.get('county')||'').trim(),
+      state:String(f.get('state')||'CA').trim().toUpperCase(),
+      parcel_number:String(f.get('parcel_number')||'').trim(),
+      case_number:String(f.get('case_number')||'').trim(),
+      claimant_phone:String(f.get('claimant_phone')||'').trim(),
+      claimant_email:String(f.get('claimant_email')||'').trim(),
+      mailing_address:String(f.get('mailing_address')||'').trim(),
+      sale_date:String(f.get('sale_date')||'') || null,
+      claim_deadline:String(f.get('claim_deadline')||'') || null,
+      surplus_amount:number(f.get('surplus_amount')),
+      fee_percent:number(f.get('fee_percent')) || 25,
+      status:String(f.get('status')||'new'),
+      source:String(f.get('source')||'').trim(),
+      source_url:String(f.get('source_url')||'').trim(),
+      next_action:String(f.get('next_action')||'Verify surplus').trim(),
+      notes:String(f.get('notes')||'').trim()
+    }
+    if (!payload.claimant_name) { setMessage('Claimant name is required.'); return }
+    const {error} = await supabase.from('surplus_cases').insert(payload)
+    if (error) { setMessage(error.message); return }
+    form.reset()
+    setMessage('Surplus recovery case saved.')
+    await loadCases()
+  }
+
+  const updateStatus = async (id:string,status:SurplusCase['status']) => {
+    const {error} = await supabase.from('surplus_cases').update({status}).eq('id',id)
+    if (error) { setMessage(error.message); return }
+    setCases(prev=>prev.map(c=>c.id===id?{...c,status}:c))
+  }
+
+  const filtered = useMemo(()=>cases.filter(c=>`${c.claimant_name} ${c.property_address} ${c.county} ${c.case_number} ${c.parcel_number}`.toLowerCase().includes(query.toLowerCase())),[cases,query])
+  const openCases = cases.filter(c=>!['paid','closed','lost'].includes(c.status))
+  const totalSurplus = openCases.reduce((a,c)=>a+Number(c.surplus_amount||0),0)
+  const projectedFees = openCases.reduce((a,c)=>a+(Number(c.surplus_amount||0)*Number(c.fee_percent||0)/100),0)
+  const now = new Date().getTime()
+  const thirtyDays = 30*24*60*60*1000
+  const urgent = openCases.filter(c=>c.claim_deadline && new Date(c.claim_deadline+'T23:59:59').getTime() >= now && new Date(c.claim_deadline+'T23:59:59').getTime()-now <= thirtyDays).length
+
+  return <div className="workspaceStack">
+    {message && <div className="loadingBanner">{message}</div>}
+
+    <section className="metrics">
+      <div className="metric"><span className="metricIcon"><BadgeDollarSign/></span><div><p>Open cases</p><h3>{openCases.length}</h3><small>{cases.length} total records</small></div></div>
+      <div className="metric"><span className="metricIcon"><BadgeDollarSign/></span><div><p>Surplus tracked</p><h3>{money(totalSurplus)}</h3><small>Open recovery cases</small></div></div>
+      <div className="metric"><span className="metricIcon"><Calculator/></span><div><p>Projected fees</p><h3>{money(projectedFees)}</h3><small>Based on each case fee %</small></div></div>
+      <div className="metric"><span className="metricIcon"><CalendarClock/></span><div><p>Deadlines ≤30 days</p><h3>{urgent}</h3><small>Review immediately</small></div></div>
+    </section>
+
+    <section className="card workspaceSplit">
+      <div className="workspaceMain">
+        <div className="sectionHeading"><BadgeDollarSign size={20}/><div><h2>Surplus recovery cases</h2><p>Track excess proceeds from discovery through payment.</p></div></div>
+        <div className="workspaceToolbar"><div className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search claimant, property, county, case..."/></div></div>
+        <div className="tableWrap"><table>
+          <thead><tr><th>Claimant / Property</th><th>County</th><th>Surplus</th><th>Fee</th><th>Projected fee</th><th>Deadline</th><th>Status</th><th>Next action</th></tr></thead>
+          <tbody>
+            {busy && <tr><td colSpan={8}>Loading surplus cases…</td></tr>}
+            {!busy && filtered.length===0 && <tr><td colSpan={8}>No surplus cases yet.</td></tr>}
+            {filtered.map(c=><tr key={c.id}>
+              <td><b>{c.claimant_name}</b><small>{c.property_address || 'No property address'}<br/>{c.case_number ? `Case ${c.case_number}` : c.parcel_number ? `APN ${c.parcel_number}` : ''}</small></td>
+              <td>{c.county || '—'}{c.state ? `, ${c.state}` : ''}</td>
+              <td><b>{money(c.surplus_amount)}</b></td>
+              <td>{Number(c.fee_percent||0).toFixed(1)}%</td>
+              <td><b>{money(Number(c.surplus_amount||0)*Number(c.fee_percent||0)/100)}</b></td>
+              <td>{c.claim_deadline || '—'}</td>
+              <td><select value={c.status} onChange={e=>updateStatus(c.id,e.target.value as SurplusCase['status'])}>{surplusStatuses.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}</select></td>
+              <td><small>{c.next_action || '—'}</small></td>
+            </tr>)}
+          </tbody>
+        </table></div>
+      </div>
+
+      <form className="workspaceForm" onSubmit={submitCase}>
+        <h3>Add surplus case</h3>
+        <input name="claimant_name" placeholder="Claimant / former owner" required/>
+        <input name="property_address" placeholder="Property address"/>
+        <div className="fieldGrid"><input name="county" placeholder="County" defaultValue="Fresno"/><input name="state" placeholder="State" defaultValue="CA" maxLength={2}/></div>
+        <div className="fieldGrid"><input name="case_number" placeholder="Case / reference #"/><input name="parcel_number" placeholder="Parcel / APN"/></div>
+        <div className="fieldGrid"><input name="claimant_phone" placeholder="Phone"/><input name="claimant_email" type="email" placeholder="Email"/></div>
+        <input name="mailing_address" placeholder="Claimant mailing address"/>
+        <div className="fieldGrid"><label>Sale date<input name="sale_date" type="date"/></label><label>Claim deadline<input name="claim_deadline" type="date"/></label></div>
+        <div className="fieldGrid"><label>Surplus amount<input name="surplus_amount" type="number" min="0" step="0.01" placeholder="0"/></label><label>Fee %<input name="fee_percent" type="number" min="0" max="100" step="0.1" defaultValue="25"/></label></div>
+        <select name="status" defaultValue="new">{surplusStatuses.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}</select>
+        <input name="source" placeholder="Source / county list"/>
+        <input name="source_url" type="url" placeholder="Source URL (optional)"/>
+        <input name="next_action" placeholder="Next action" defaultValue="Verify surplus"/>
+        <textarea name="notes" placeholder="Notes, heirs, liens, outreach, documents needed..."/>
+        <button className="primary"><Plus size={15}/> Save surplus case</button>
+        <small>Fee percentage is configurable. Verify applicable state/county rules before using a contingency agreement.</small>
+      </form>
+    </section>
+  </div>
+}
+
+const scriptExamples = [
+  {
+    title:'Cold Call — Motivated Seller',
+    category:'Wholesaling',
+    text:`Hi, is this [OWNER NAME]?
+
+My name is [YOUR NAME]. I’m calling about the property at [PROPERTY ADDRESS]. I’m looking to buy another property in the area and wanted to see if you’d consider selling it.
+
+I’m not a realtor — I buy properties directly. If the numbers work for both of us, I can make a cash offer and buy it as-is, so you wouldn’t have to make repairs or list it.
+
+Would you be open to an offer?`
+  },
+  {
+    title:'Seller Qualification Questions',
+    category:'Wholesaling',
+    text:`Great. I just need to understand the property a little better.
+
+• What’s making you consider selling?
+• How soon would you ideally like to sell?
+• What condition is the property in?
+• Are there any major repairs needed?
+• Is anyone currently living there?
+• Is there a mortgage or any liens that you know of?
+• If we could make the process easy, what price would you need to feel comfortable selling?`
+  },
+  {
+    title:'Cash Offer Pitch',
+    category:'Offers',
+    text:`Based on what you told me, and considering the repairs and what similar properties are selling for, the number that makes sense for us is about [OFFER AMOUNT].
+
+That would be a cash purchase, as-is. You wouldn’t need to make repairs, clean anything out, or pay agent commissions.
+
+If we can agree on that price, we can put it in writing and work around the closing date that works best for you.
+
+How does [OFFER AMOUNT] sound?`
+  },
+  {
+    title:'When Seller Says Offer Is Too Low',
+    category:'Objections',
+    text:`I understand. I don’t want to insult you with the number.
+
+The reason I’m at [OFFER AMOUNT] is because I have to account for the repairs, holding costs, closing costs, and enough room for the deal to make sense.
+
+What number were you hoping to get?
+
+If we can get closer to each other, I’m happy to see whether there’s a way to structure it so it works for both of us.`
+  },
+  {
+    title:'Follow-Up Call',
+    category:'Follow-up',
+    text:`Hi [OWNER NAME], this is [YOUR NAME]. We spoke about the property at [PROPERTY ADDRESS].
+
+I wanted to follow up and see whether anything has changed with your plans for the property.
+
+Are you still thinking about selling, or did you decide to hold onto it for now?`
+  },
+  {
+    title:'Voicemail',
+    category:'Follow-up',
+    text:`Hi [OWNER NAME], this is [YOUR NAME]. I’m calling about the property at [PROPERTY ADDRESS].
+
+I wanted to see if you might consider an as-is cash offer for it. No pressure — just wanted to see whether selling is something you’d consider.
+
+You can call or text me back at [PHONE NUMBER]. Again, this is [YOUR NAME]. Thanks.`
+  },
+  {
+    title:'Surplus Recovery — First Call',
+    category:'Surplus Recovery',
+    text:`Hi, is this [CLAIMANT NAME]?
+
+My name is [YOUR NAME]. I’m calling regarding a property connected with you at [PROPERTY ADDRESS].
+
+Public records indicate there may be excess funds remaining from a prior sale or foreclosure. I’m reaching out because you may be entitled to claim some or all of those funds.
+
+I help people research and recover surplus funds. There’s no upfront payment from you; if we decide to work together, my fee would be explained in writing before you sign anything.
+
+Have you already been contacted about these funds or filed a claim?`
+  },
+  {
+    title:'Surplus Recovery — Fee Explanation',
+    category:'Surplus Recovery',
+    text:`The way my service works is simple: I research the claim, help gather the required paperwork, and help move the recovery process forward.
+
+I don’t charge you upfront. My fee is [FEE PERCENT]% of money actually recovered, so if nothing is recovered, there is no recovery fee.
+
+Before anything moves forward, you’ll receive the agreement in writing so you can review the terms and ask questions.`
+  }
+]
+
+function ScriptsPage() {
+  const [filter,setFilter] = useState('All')
+  const [copied,setCopied] = useState('')
+  const categories = ['All',...Array.from(new Set(scriptExamples.map(s=>s.category)))]
+  const shown = filter==='All' ? scriptExamples : scriptExamples.filter(s=>s.category===filter)
+
+  const copyScript = async (title:string,text:string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(title)
+      window.setTimeout(()=>setCopied(''),1600)
+    } catch {
+      setCopied('')
+    }
+  }
+
+  return <div className="workspaceStack">
+    <section className="card workspaceHero">
+      <div><MessageSquareText size={24}/><div><h2>Call & Offer Scripts</h2><p>Example language for seller calls, follow-ups, offer presentations, objections, and surplus-recovery outreach.</p></div></div>
+    </section>
+
+    <section className="card">
+      <div className="workspaceToolbar">
+        <select value={filter} onChange={e=>setFilter(e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select>
+      </div>
+      <div className="dataCards">
+        {shown.map(s=><article className="dataCard" key={s.title} style={{display:'block'}}>
+          <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'flex-start'}}>
+            <div><span className="pill stagePill">{s.category}</span><h3 style={{marginTop:10}}>{s.title}</h3></div>
+            <button className="secondary" onClick={()=>copyScript(s.title,s.text)}>{copied===s.title?'Copied':'Copy'}</button>
+          </div>
+          <pre style={{whiteSpace:'pre-wrap',fontFamily:'inherit',lineHeight:1.55,marginTop:14}}>{s.text}</pre>
+        </article>)}
+      </div>
+      <p className="emptyText" style={{marginTop:16}}>Use these as examples, not promises. Keep statements accurate and comply with applicable telemarketing, disclosure, licensing, and real-estate rules.</p>
+    </section>
   </div>
 }

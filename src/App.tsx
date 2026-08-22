@@ -12,7 +12,7 @@ import WorkspacePage, { type WorkspaceLead, type WorkspaceView } from './compone
 type Stage = 'New' | 'Contacted' | 'Qualified' | 'Offer Sent' | 'Under Contract' | 'Closed'
 
 const stages: Stage[] = ['New', 'Contacted', 'Qualified', 'Offer Sent', 'Under Contract', 'Closed']
-const views: WorkspaceView[] = ['dashboard','leads','pipeline','outreach','offers','buyers','tasks','calculator','contracts']
+const views: WorkspaceView[] = ['dashboard','leads','pipeline','outreach','offers','buyers','tasks','calculator','contracts','surplus','scripts']
 
 const pageMeta: Record<WorkspaceView, { title:string; subtitle:string }> = {
   dashboard: { title:'Deal Dashboard', subtitle:'See what needs attention, what can close, and where the money is.' },
@@ -23,7 +23,9 @@ const pageMeta: Record<WorkspaceView, { title:string; subtitle:string }> = {
   buyers: { title:'Cash Buyers', subtitle:'Manage your disposition list, buy boxes, and proof of funds.' },
   tasks: { title:'Tasks', subtitle:'Keep every follow-up and deadline in one queue.' },
   calculator: { title:'Offer Calculator', subtitle:'Calculate a seller offer, buyer price, and assignment spread.' },
-  contracts: { title:'Contract Maker', subtitle:'Create purchase and assignment agreement drafts from live deal data.' }
+  contracts: { title:'Contract Maker', subtitle:'Create purchase and assignment agreement drafts from live deal data.' },
+  surplus: { title:'Surplus Recovery', subtitle:'Track excess proceeds, claimants, deadlines, outreach and projected recovery fees.' },
+  scripts: { title:'Call & Offer Scripts', subtitle:'Use ready-made scripts for seller calls, offers, objections and surplus-recovery outreach.' }
 }
 
 type Lead = WorkspaceLead
@@ -147,6 +149,8 @@ function App() {
         <a href="#tasks" className={view==='tasks'?'active':''}><CalendarClock size={18}/> Tasks</a>
         <a href="#calculator" className={view==='calculator'?'active':''}><Calculator size={18}/> Offer Calculator</a>
         <a href="#contracts" className={view==='contracts'?'active':''}><FileText size={18}/> Contracts</a>
+        <a href="#surplus" className={view==='surplus'?'active':''}><CircleDollarSign size={18}/> Surplus Recovery</a>
+        <a href="#scripts" className={view==='scripts'?'active':''}><MessageSquareText size={18}/> Scripts</a>
       </nav>
       <div className="sideFoot"><Activity size={16}/><div><b>System ready</b><span>Live Supabase CRM</span></div></div>
     </aside>
