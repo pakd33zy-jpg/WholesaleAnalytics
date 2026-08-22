@@ -33,6 +33,10 @@ function scoreRecord(record) {
   if (record?.ownerOccupied === false) {
     score += 30
     reasons.push('absentee owner')
+  } else if (record?.ownerOccupied === true) {
+    reasons.push('owner occupied')
+  } else {
+    reasons.push('occupancy unknown')
   }
 
   if (held != null) {
@@ -40,6 +44,8 @@ function scoreRecord(record) {
     else if (held >= 10) { score += 16; reasons.push(`${held} years owned`) }
     else if (held >= 5) { score += 10; reasons.push(`${held} years owned`) }
     else if (held >= 3) { score += 6; reasons.push(`${held} years owned`) }
+  } else {
+    reasons.push('sale date unavailable')
   }
 
   const built = Number(record?.yearBuilt || 0)
@@ -73,10 +79,7 @@ async function verifySupabaseUser(req) {
   const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_Zu_8eyZC4vspm1X3Np0pjw_TMuTRQXw'
 
   const response = await fetch(`${url.replace(/\/$/,'')}/auth/v1/user`,{
-    headers:{
-      Authorization: auth,
-      apikey: key
-    }
+    headers:{ Authorization: auth, apikey: key }
   })
   return response.ok
 }
@@ -116,6 +119,9 @@ export default async function handler(req,res) {
       return res.status(400).json({error:'Unsupported property type.'})
     }
 
+    // Pull the largest page RentCast allows. Their billing counts successful API requests,
+    // not how many property records are returned, so this gives the filter engine enough data
+    // without spending extra calls.
     const params = new URLSearchParams()
     if (zipCode) {
       params.set('zipCode',zipCode)
@@ -124,25 +130,36 @@ export default async function handler(req,res) {
       params.set('state',state)
     }
     if (propertyType) params.set('propertyType',propertyType)
-    params.set('limit',String(Math.min(250,Math.max(100,limit * 3))))
+    params.set('limit','500')
 
     const upstream = await fetch(`https://api.rentcast.io/v1/properties?${params.toString()}`,{
-      headers:{
-        Accept:'application/json',
-        'X-Api-Key':apiKey
-      }
+      headers:{ Accept:'application/json', 'X-Api-Key':apiKey }
     })
 
     if (!upstream.ok) {
-      if (upstream.status === 401) return res.status(502).json({error:'RentCast rejected the API key. Check RENTCAST_API_KEY in Vercel.'})
+      const detail = await upstream.json().catch(()=>({}))
+      const providerMessage = String(detail?.message || detail?.error || '').slice(0,240)
+
+      console.error('RentCast lead finder upstream error',{
+        status:upstream.status,
+        providerMessage
+      })
+
+      if (upstream.status === 401) {
+        return res.status(502).json({
+          error: providerMessage
+            ? `RentCast authorization failed: ${providerMessage}`
+            : 'RentCast rejected the API key or subscription.'
+        })
+      }
       if (upstream.status === 429) return res.status(429).json({error:'RentCast API quota or rate limit reached.'})
-      return res.status(502).json({error:`Property provider returned ${upstream.status}.`})
+      return res.status(502).json({error:providerMessage || `Property provider returned ${upstream.status}.`})
     }
 
     const raw = await upstream.json()
     const records = Array.isArray(raw) ? raw : []
 
-    const results = records.map(record=>{
+    const mapped = records.map(record=>{
       const ranked = scoreRecord(record)
       const ownerNames = Array.isArray(record?.owner?.names) ? record.owner.names.filter(Boolean) : []
       return {
@@ -164,17 +181,63 @@ export default async function handler(req,res) {
         score: ranked.score,
         reasons: ranked.reasons
       }
+    }).filter(lead=>lead.formattedAddress)
+
+    const absenteePool = absenteeOnly
+      ? mapped.filter(lead=>lead.ownerOccupied === false)
+      : mapped
+
+    const yearsPool = minYears > 0
+      ? absenteePool.filter(lead=>lead.yearsHeld != null && lead.yearsHeld >= minYears)
+      : absenteePool
+
+    const exact = yearsPool
+      .filter(lead=>lead.score >= minScore)
+      .sort((a,b)=>b.score-a.score)
+
+    let fallback = false
+    let fallbackReason = ''
+    let finalPool = exact
+
+    if (finalPool.length === 0 && mapped.length > 0) {
+      fallback = true
+
+      // Preserve absentee preference first, but relax ownership-age/score filters.
+      if (absenteeOnly && absenteePool.length > 0) {
+        finalPool = [...absenteePool].sort((a,b)=>b.score-a.score)
+        fallbackReason = 'No properties met every filter, so ownership-age and score filters were relaxed while keeping absentee owners.'
+      } else {
+        finalPool = [...mapped].sort((a,b)=>b.score-a.score)
+        fallbackReason = absenteeOnly
+          ? 'No absentee-owner records were present in this RentCast page, so the closest property-owner candidates are shown.'
+          : 'No properties met every filter, so the closest candidates are shown.'
+      }
+    }
+
+    const results = finalPool.slice(0,limit)
+
+    console.log('Lead Finder search',{
+      location: zipCode || `${city}, ${state}`,
+      rawCount:mapped.length,
+      absenteeCount:mapped.filter(x=>x.ownerOccupied===false).length,
+      yearsMatchCount:yearsPool.length,
+      exactMatchCount:exact.length,
+      returnedCount:results.length,
+      fallback
     })
-    .filter(lead => !absenteeOnly || lead.ownerOccupied === false)
-    .filter(lead => minYears <= 0 || (lead.yearsHeld != null && lead.yearsHeld >= minYears))
-    .filter(lead => lead.score >= minScore)
-    .sort((a,b)=>b.score-a.score)
-    .slice(0,limit)
 
     return res.status(200).json({
       provider:'RentCast',
       results,
-      count:results.length
+      count:results.length,
+      fallback,
+      fallbackReason,
+      stats:{
+        rawCount:mapped.length,
+        absenteeCount:mapped.filter(x=>x.ownerOccupied===false).length,
+        yearsMatchCount:yearsPool.length,
+        exactMatchCount:exact.length
+      }
     })
   } catch (error) {
     console.error('lead-finder error',error)

@@ -43,6 +43,7 @@ export default function LeadFinder({existingAddresses,onRefreshLeads}:Props) {
   const [results,setResults] = useState<FinderLead[]>([])
   const [busy,setBusy] = useState(false)
   const [message,setMessage] = useState('')
+  const [searchDetail,setSearchDetail] = useState('')
   const [adding,setAdding] = useState<string|null>(null)
   const [added,setAdded] = useState<Set<string>>(new Set())
 
@@ -56,6 +57,7 @@ export default function LeadFinder({existingAddresses,onRefreshLeads}:Props) {
     }
     setBusy(true)
     setMessage('')
+    setSearchDetail('')
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
@@ -76,11 +78,22 @@ export default function LeadFinder({existingAddresses,onRefreshLeads}:Props) {
       })
       const body = await response.json().catch(()=>({}))
       if (!response.ok) throw new Error(body.error || 'Lead search failed')
-      setResults(Array.isArray(body.results) ? body.results : [])
-      setMessage(`${body.results?.length || 0} lead candidates found.`)
+
+      const found = Array.isArray(body.results) ? body.results : []
+      setResults(found)
+
+      if (body.fallback) {
+        setMessage(`${found.length} closest lead candidates shown.`)
+        setSearchDetail(body.fallbackReason || 'Exact filters produced no matches, so the search was automatically relaxed.')
+      } else {
+        setMessage(`${found.length} lead candidates found.`)
+        const s = body.stats
+        if (s) setSearchDetail(`RentCast returned ${s.rawCount} property records · ${s.absenteeCount} absentee-owner records · ${s.exactMatchCount} exact filter matches.`)
+      }
     } catch (err:any) {
       setResults([])
       setMessage(err.message || 'Lead search failed')
+      setSearchDetail('')
     } finally {
       setBusy(false)
     }
@@ -114,7 +127,7 @@ export default function LeadFinder({existingAddresses,onRefreshLeads}:Props) {
   }
 
   return <div className="workspaceStack">
-    {message && <div className="loadingBanner">{message}</div>}
+    {message && <div className="loadingBanner">{message}{searchDetail && <small style={{display:'block',marginTop:4}}>{searchDetail}</small>}</div>}
 
     <section className="workspaceHero card">
       <div><Search size={24}/><div><h2>Nationwide lead finder</h2><p>Search property records and rank likely wholesale prospects by absentee ownership, ownership length and property age.</p></div></div>
@@ -146,7 +159,7 @@ export default function LeadFinder({existingAddresses,onRefreshLeads}:Props) {
         <label className="checkRow"><input type="checkbox" checked={absenteeOnly} onChange={e=>setAbsenteeOnly(e.target.checked)} /><span>Absentee owners only</span></label>
         <div className="formActions"><button className="primary" disabled={busy}>{busy ? <LoaderCircle size={16}/> : <Search size={16}/>} {busy?'Searching…':'Find leads'}</button></div>
       </form>
-      <p className="emptyText">Tip: a ZIP-only search is fastest. One search can return many properties while using one provider request.</p>
+      <p className="emptyText">The search now analyzes up to 500 RentCast property records in one request. If exact filters return zero, DealFlow automatically shows the closest candidates instead of a blank result.</p>
     </section>
 
     <section className="card">
